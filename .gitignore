@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+.env
+.env.*
+
+# Build/ops
+.artifacts/
+.dist/
+.cache/
+.pytest_cache/
+
+# Editors
+.vscode/
+.idea/

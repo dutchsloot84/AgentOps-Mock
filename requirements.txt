@@ -1,0 +1,8 @@
+fastapi==0.112.2
+uvicorn[standard]==0.30.6
+python-dotenv==1.0.1
+pydantic==2.9.2
+requests==2.32.3
+vertexai==1.67.1
+google-cloud-aiplatform==1.66.0
+google-cloud-storage==2.18.2
