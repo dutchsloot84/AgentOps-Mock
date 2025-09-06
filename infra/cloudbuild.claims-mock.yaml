@@ -1,0 +1,5 @@
+steps:
+- name: gcr.io/cloud-builders/docker
+  args: ['build', '-f', 'mocks/claims_api/Dockerfile', '-t', '$_IMAGE', '.']
+images:
+- '$_IMAGE'
