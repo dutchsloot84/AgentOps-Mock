@@ -82,7 +82,7 @@ def _ensure_endpoint_and_deploy(index_name: str, deployed_index_id_base: str) ->
         message = str(e)
         if "already exists a DeployedIndex with same ID" in message or "ALREADY_EXISTS" in message:
             short = uuid.uuid4().hex[:6]
-            deployed_id = f"{deployed_index_id_base}-{short}"
+            deployed_id = f"{deployed_index_id_base}_{short}"
             idx_obj = aiplatform.MatchingEngineIndex(index_name)
             endpoint.deploy_index(index=idx_obj, deployed_index_id=deployed_id)
             time.sleep(10)
@@ -105,7 +105,7 @@ def run_upsert() -> Dict:
     vectors = _embed_texts([r["text"] for r in records])
     embed_dim = len(vectors[0])
     index_display_name = f"{INDEX_DISPLAY_NAME_BASE}-{embed_dim}d"
-    deployed_index_id_base = f"agentops-{embed_dim}d"
+    deployed_index_id_base = f"agentops_{embed_dim}d"
 
     # Ensure index + endpoint deploy
     index_name = _ensure_index(embed_dim, index_display_name)
