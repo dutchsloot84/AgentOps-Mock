@@ -14,7 +14,7 @@ app = FastAPI(title="agentops-mock")
 
 # Serve the UI from /ui
 ui_dir = os.path.join(os.path.dirname(__file__), "web")
-app.mount("/ui", StaticFiles(directory=ui_dir), name="ui")
+app.mount("/ui", StaticFiles(directory=ui_dir, html=True), name="ui")
 
 app.add_middleware(
     CORSMiddleware,

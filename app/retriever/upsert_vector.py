@@ -45,13 +45,22 @@ def _ensure_index(dimensions: int, display_name: str) -> str:
     index.wait()
     return index.resource_name
 
-def _ensure_endpoint_and_deploy(index_name: str, deployed_index_id_base: str) -> Tuple[str, str]:
+def _ensure_endpoint_and_deploy(index_name: str, deployed_index_id_base: str) -> tuple[str, str]:
     """
-    Returns (endpoint_resource_name, deployed_index_id_in_use).
-    Handles conflicts by generating a unique deployed_index_id when needed.
+    Ensure a PUBLIC IndexEndpoint exists with ENDPOINT_DISPLAY_NAME and that `index_name`
+    is deployed to it. Return (endpoint_resource_name, deployed_index_id_in_use).
+
+    Rules:
+    - If endpoint exists and already has THIS index deployed => reuse, return its existing deployedIndexId.
+    - Else try to deploy with `deployed_index_id_base`.
+    - If that ID collides, append a short suffix (-<6 hex>) and retry once.
     """
+    from google.cloud import aiplatform
+    import uuid, time
+
     aiplatform.init(project=PROJECT_ID, location=LOCATION)
-    # Find or create public endpoint
+
+    # 1) Get or create endpoint (public)
     endpoint = None
     for ep in aiplatform.MatchingEngineIndexEndpoint.list():
         if ep.display_name == ENDPOINT_DISPLAY_NAME:
@@ -60,33 +69,30 @@ def _ensure_endpoint_and_deploy(index_name: str, deployed_index_id_base: str) ->
     if endpoint is None:
         endpoint = aiplatform.MatchingEngineIndexEndpoint.create(
             display_name=ENDPOINT_DISPLAY_NAME,
-            description="Public endpoint for AgentOps demo",
+            description="AgentOps demo public endpoint",
             public_endpoint_enabled=True,
         )
         endpoint.wait()
 
-    # If this index already deployed → reuse
+    # 2) Reuse if this index already deployed
     for d in endpoint.deployed_indexes:
         if d.index == index_name:
-            # Already deployed; return existing deployedIndexId
             return endpoint.resource_name, d.id
 
-    # Otherwise, try deploy with base ID; if conflicting, add a short suffix
-    deployed_id = deployed_index_id_base
+    # 3) Try deploy with base ID; on collision, suffix and retry once
+    idx_obj = aiplatform.MatchingEngineIndex(index_name)
+    deploy_id = deployed_index_id_base
     try:
-        idx_obj = aiplatform.MatchingEngineIndex(index_name)
-        endpoint.deploy_index(index=idx_obj, deployed_index_id=deployed_id)
+        endpoint.deploy_index(index=idx_obj, deployed_index_id=deploy_id)
         time.sleep(10)
-        return endpoint.resource_name, deployed_id
+        return endpoint.resource_name, deploy_id
     except Exception as e:
-        message = str(e)
-        if "already exists a DeployedIndex with same ID" in message or "ALREADY_EXISTS" in message:
-            short = uuid.uuid4().hex[:6]
-            deployed_id = f"{deployed_index_id_base}_{short}"
-            idx_obj = aiplatform.MatchingEngineIndex(index_name)
-            endpoint.deploy_index(index=idx_obj, deployed_index_id=deployed_id)
+        msg = str(e)
+        if "already exists a DeployedIndex with same ID" in msg or "ALREADY_EXISTS" in msg:
+            deploy_id = f"{deployed_index_id_base}-{uuid.uuid4().hex[:6]}"
+            endpoint.deploy_index(index=idx_obj, deployed_index_id=deploy_id)
             time.sleep(10)
-            return endpoint.resource_name, deployed_id
+            return endpoint.resource_name, deploy_id
         raise
 
 def run_upsert() -> Dict:
@@ -105,7 +111,7 @@ def run_upsert() -> Dict:
     vectors = _embed_texts([r["text"] for r in records])
     embed_dim = len(vectors[0])
     index_display_name = f"{INDEX_DISPLAY_NAME_BASE}-{embed_dim}d"
-    deployed_index_id_base = f"agentops_{embed_dim}d"
+    deployed_index_id_base = f"agentops-{embed_dim}d"
 
     # Ensure index + endpoint deploy
     index_name = _ensure_index(embed_dim, index_display_name)

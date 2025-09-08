@@ -158,44 +158,34 @@ Keep them short — fast to embed, cheap to store.
 4. Run `python -m app.retriever.upsert_vector` locally to create embeddings + index.
 5. Deploy **agentops-mock** → Cloud Run with env vars pointing to MCP services and Vector Search settings.
 
-### Live Demo UI (same Cloud Run service)
+### Happy Path (Interview Prep)
 
-1. Authenticate and prepare vectors:
-   ```bash
-   gcloud auth application-default login
-   PROJECT_ID=<PROJECT_ID> LOCATION=us-central1 python -m app.retriever.upsert_vector  # prints deployed_index_id
-   ls -l .artifacts/catalog.json
-   ```
+1. `gcloud auth application-default login`
 
-2. Build & deploy the agent (UI + API together):
+2. `PROJECT_ID=<PROJECT_ID> LOCATION=us-central1 python -m app.retriever.upsert_vector`
+
+   Output prints deployed_index_id, index_display_name, and dim
+
+   `.artifacts/catalog.json` is created
+
+3. Build & deploy:
 
 ```bash
-gcloud builds submit \
-  --config infra/cloudbuild.agent.yaml \
-  --substitutions=_IMAGE=gcr.io/<PROJECT_ID>/agentops-mock .
-
-gcloud run deploy agentops-mock \
-  --image gcr.io/<PROJECT_ID>/agentops-mock \
-  --allow-unauthenticated \
-  --region us-central1 \
-  --port 8080 \
+gcloud builds submit --config infra/cloudbuild.agent.yaml --substitutions=_IMAGE=gcr.io/<PROJECT_ID>/agentops-mock .
+gcloud run deploy agentops-mock --image gcr.io/<PROJECT_ID>/agentops-mock --allow-unauthenticated --region us-central1 --port 8080 \
   --set-env-vars PROJECT_ID=<PROJECT_ID>,LOCATION=us-central1,INDEX_DISPLAY_NAME=agentops-mock-index,ENDPOINT_DISPLAY_NAME=agentops-mock-endpoint
 ```
 
-3. Open the UI:
+4. `./scripts/smoke.sh` (should show healthz OK, RAG JSON, and the UI URL)
 
-```
-$AGENT_URL/ui/index.html
-```
-
-(Optionally point at another agent with ?agent=https://other-host)
+5. Open the UI: `https://<cloud-run-host>/ui/index.html`
 
 #### Troubleshooting
 
-- `ALREADY_EXISTS` deployedIndexId → script now auto-suffixes; re-run upsert.
-- `StreamUpdate not enabled` → index is always created with `STREAM_UPDATE`.
-- `Incorrect dimensionality` → index dimension is derived from the embedding and is part of the display name (e.g., `-768d`).
-- `Catalog not found` → run upsert locally, then rebuild & redeploy.
+- 409 `AlreadyExists` (deployedIndexId): automatically resolved by suffixing; re-run upsert.
+- `StreamUpdate not enabled`: index always created with `STREAM_UPDATE`.
+- Incorrect dimensionality (`3072` vs `768`): index display name includes `-<dim>d` and is created to match embeddings.
+- Catalog not found: run upsert locally before building the image.
 
 ---
 

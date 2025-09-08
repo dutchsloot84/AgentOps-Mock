@@ -16,3 +16,4 @@ venv/
 .dist/
 .cache/
 .pytest_cache/
+# keep .artifacts for live demo
