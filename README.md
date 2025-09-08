@@ -160,13 +160,14 @@ Keep them short — fast to embed, cheap to store.
 
 ### Live Demo UI (same Cloud Run service)
 
-1. Create vectors + catalog locally (must exist before build):
+1. Authenticate and prepare vectors:
    ```bash
-   PROJECT_ID=<PROJECT_ID> LOCATION=us-central1 python -m app.retriever.upsert_vector
+   gcloud auth application-default login
+   PROJECT_ID=<PROJECT_ID> LOCATION=us-central1 python -m app.retriever.upsert_vector  # prints deployed_index_id
    ls -l .artifacts/catalog.json
    ```
 
-Build & deploy the agent (UI + API together):
+2. Build & deploy the agent (UI + API together):
 
 ```bash
 gcloud builds submit \
@@ -181,13 +182,20 @@ gcloud run deploy agentops-mock \
   --set-env-vars PROJECT_ID=<PROJECT_ID>,LOCATION=us-central1,INDEX_DISPLAY_NAME=agentops-mock-index,ENDPOINT_DISPLAY_NAME=agentops-mock-endpoint
 ```
 
-Open the UI:
+3. Open the UI:
 
 ```
-https://<cloud-run-host>/ui/index.html
+$AGENT_URL/ui/index.html
 ```
 
 (Optionally point at another agent with ?agent=https://other-host)
+
+#### Troubleshooting
+
+- `ALREADY_EXISTS` deployedIndexId → script now auto-suffixes; re-run upsert.
+- `StreamUpdate not enabled` → index is always created with `STREAM_UPDATE`.
+- `Incorrect dimensionality` → index dimension is derived from the embedding and is part of the display name (e.g., `-768d`).
+- `Catalog not found` → run upsert locally, then rebuild & redeploy.
 
 ---
 
