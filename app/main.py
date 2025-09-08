@@ -1,6 +1,8 @@
 import os
 import requests
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .retriever.search import search_topk
@@ -9,6 +11,22 @@ TASKS_MCP_BASE = os.getenv("TASKS_MCP_BASE")
 CLAIMS_MCP_BASE = os.getenv("CLAIMS_MCP_BASE")
 
 app = FastAPI(title="agentops-mock")
+
+# Serve the UI from /ui
+ui_dir = os.path.join(os.path.dirname(__file__), "web")
+app.mount("/ui", StaticFiles(directory=ui_dir), name="ui")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
 
 
 class ChatRequest(BaseModel):

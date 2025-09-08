@@ -158,6 +158,37 @@ Keep them short — fast to embed, cheap to store.
 4. Run `python -m app.retriever.upsert_vector` locally to create embeddings + index.
 5. Deploy **agentops-mock** → Cloud Run with env vars pointing to MCP services and Vector Search settings.
 
+### Live Demo UI (same Cloud Run service)
+
+1. Create vectors + catalog locally (must exist before build):
+   ```bash
+   PROJECT_ID=<PROJECT_ID> LOCATION=us-central1 python -m app.retriever.upsert_vector
+   ls -l .artifacts/catalog.json
+   ```
+
+Build & deploy the agent (UI + API together):
+
+```bash
+gcloud builds submit \
+  --config infra/cloudbuild.agent.yaml \
+  --substitutions=_IMAGE=gcr.io/<PROJECT_ID>/agentops-mock .
+
+gcloud run deploy agentops-mock \
+  --image gcr.io/<PROJECT_ID>/agentops-mock \
+  --allow-unauthenticated \
+  --region us-central1 \
+  --port 8080 \
+  --set-env-vars PROJECT_ID=<PROJECT_ID>,LOCATION=us-central1,INDEX_DISPLAY_NAME=agentops-mock-index,ENDPOINT_DISPLAY_NAME=agentops-mock-endpoint
+```
+
+Open the UI:
+
+```
+https://<cloud-run-host>/ui/index.html
+```
+
+(Optionally point at another agent with ?agent=https://other-host)
+
 ---
 
 ## Try It

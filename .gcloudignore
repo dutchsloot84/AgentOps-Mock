@@ -1,0 +1,18 @@
+# Use same rules as .dockerignore to control Cloud Build context
+.git
+.github
+.vscode
+.idea
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+.env
+.env.*
+.dist/
+.cache/
+.pytest_cache/
