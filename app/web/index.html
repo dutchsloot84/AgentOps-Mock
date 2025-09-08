@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AgentOps Mock – Live Demo</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, Arial; margin: 24px; max-width: 960px; }
+    textarea { width: 100%; height: 90px; }
+    pre { background: #f6f8fa; padding: 12px; overflow: auto; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .btn { padding: 8px 12px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    .btn:hover { background: #f1f5f9; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    input[type=text] { width: 100%; }
+  </style>
+</head>
+<body>
+  <h1>AgentOps Mock – Live Demo</h1>
+  <p>Ask a question (RAG), or use quick actions (Tasks/Claims).</p>
+
+  <label>Agent URL:
+    <input id="agentUrl" type="text" />
+  </label>
+
+  <h3>Chat (RAG)</h3>
+  <textarea id="query" placeholder="e.g., What are the key steps in our release audit checklist?"></textarea>
+  <div class="row">
+    <button class="btn" id="askBtn">Ask</button>
+    <span id="status"></span>
+  </div>
+
+  <div class="cols">
+    <div>
+      <h4>Answer</h4>
+      <pre id="answer"></pre>
+    </div>
+    <div>
+      <h4>Contexts</h4>
+      <pre id="contexts"></pre>
+    </div>
+  </div>
+
+  <h3>Quick Actions</h3>
+  <div class="row">
+    <button class="btn" data-q='Add a task: Prepare enablement deck for SI workshop due 2025-09-09'>Add Task</button>
+    <button class="btn" data-q='List my tasks'>List Tasks</button>
+    <button class="btn" data-q='What is the claims service status?'>Claims Status</button>
+    <button class="btn" data-q='Create FNOL for external ref 734206245 with 2 docs'>Create FNOL</button>
+  </div>
+
+  <h4>Raw Response</h4>
+  <pre id="raw"></pre>
+
+  <script>
+    const agentInput = document.getElementById('agentUrl');
+    const q = document.getElementById('query');
+    const askBtn = document.getElementById('askBtn');
+    const answer = document.getElementById('answer');
+    const contexts = document.getElementById('contexts');
+    const raw = document.getElementById('raw');
+    const status = document.getElementById('status');
+
+    // Default to same-origin (UI + API on one Cloud Run service)
+    agentInput.value = location.origin;
+
+    // Allow override via ?agent=<url>
+    const params = new URLSearchParams(location.search);
+    if (params.get('agent')) agentInput.value = params.get('agent');
+
+    async function callAgent(text) {
+      status.textContent = 'Calling...';
+      answer.textContent = '';
+      contexts.textContent = '';
+      raw.textContent = '';
+      try {
+        const base = agentInput.value.replace(/\/$/, '');
+        const res = await fetch(base + '/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: text })
+        });
+        const data = await res.json();
+        raw.textContent = JSON.stringify(data, null, 2);
+        answer.textContent = data.answer ?? '';
+        contexts.textContent = JSON.stringify(data.contexts ?? [], null, 2);
+        status.textContent = res.ok ? 'OK' : ('HTTP ' + res.status);
+      } catch (e) {
+        status.textContent = 'Error';
+        raw.textContent = String(e);
+      }
+    }
+
+    askBtn.onclick = () => callAgent(q.value.trim());
+    document.querySelectorAll('button[data-q]').forEach(btn => {
+      btn.onclick = () => callAgent(btn.getAttribute('data-q'));
+    });
+  </script>
+</body>
+</html>

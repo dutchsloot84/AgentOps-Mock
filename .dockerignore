@@ -1,0 +1,19 @@
+# Exclude git metadata and caches
+.git
+.github
+.vscode
+.idea
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+.env
+.env.*
+.dist/
+.cache/
+.pytest_cache/
+# keep .artifacts for live demo

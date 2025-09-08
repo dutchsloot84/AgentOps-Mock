@@ -1,80 +1,66 @@
-import json
-import os
+import json, os
 from typing import List, Dict
 
-from google.cloud import aiplatform
 from google.cloud import aiplatform_v1
 from vertexai import init as vertex_init
 from vertexai.preview.language_models import TextEmbeddingModel
 
-CATALOG_PATH = os.getenv("CATALOG_PATH", ".artifacts/catalog.json")
 PROJECT_ID = os.getenv("PROJECT_ID")
 LOCATION = os.getenv("LOCATION", "us-central1")
-INDEX_DISPLAY_NAME = os.getenv("INDEX_DISPLAY_NAME", "agentops-mock-index")
-ENDPOINT_DISPLAY_NAME = os.getenv("ENDPOINT_DISPLAY_NAME", "agentops-mock-endpoint")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-004")
+ENDPOINT_DISPLAY_NAME = os.getenv("ENDPOINT_DISPLAY_NAME", "agentops-mock-endpoint")
 
-DEPLOYED_INDEX_ID = "agentops_deployed"
-TOP_K = int(os.getenv("TOP_K", "5"))
+CATALOG_PATH = ".artifacts/catalog.json"
 
-
-def _embed_query(q: str) -> list[float]:
+def _embed_query(q: str) -> List[float]:
     vertex_init(project=PROJECT_ID, location=LOCATION)
     model = TextEmbeddingModel.from_pretrained(EMBED_MODEL)
     return model.get_embeddings([q])[0].values
 
-
-def _get_endpoint_name() -> str:
-    aiplatform.init(project=PROJECT_ID, location=LOCATION)
-    for ep in aiplatform.MatchingEngineIndexEndpoint.list():
+def _resolve_endpoint_name() -> str:
+    client = aiplatform_v1.IndexEndpointServiceClient(
+        client_options={"api_endpoint": f"{LOCATION}-aiplatform.googleapis.com"}
+    )
+    parent = f"projects/{PROJECT_ID}/locations/{LOCATION}"
+    for ep in client.list_index_endpoints(request={"parent": parent}):
         if ep.display_name == ENDPOINT_DISPLAY_NAME:
-            return ep.resource_name
-    raise RuntimeError(f"IndexEndpoint with display_name={ENDPOINT_DISPLAY_NAME} not found")
+            return ep.name
+    raise RuntimeError(f"IndexEndpoint with display_name '{ENDPOINT_DISPLAY_NAME}' not found")
 
-
-def _load_catalog() -> Dict[str, Dict]:
+def search_topk(query: str, top_k: int = 5) -> List[Dict]:
     if not os.path.exists(CATALOG_PATH):
-        raise FileNotFoundError(
-            f"Catalog not found at {CATALOG_PATH}. Run the upsert step locally to generate it, "
-            "then redeploy the agent so the file is baked into the image."
-        )
+        raise RuntimeError(f"Catalog not found at {CATALOG_PATH}")
+
     with open(CATALOG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        catalog = json.load(f)
 
+    vec = _embed_query(query)
 
-def search_topk(query: str, top_k: int = TOP_K) -> List[Dict]:
-    vector = _embed_query(query)
-    endpoint_name = _get_endpoint_name()
-    catalog = _load_catalog()
-
-    client = aiplatform.gapic.IndexEndpointServiceClient(client_options={"api_endpoint": f"{LOCATION}-aiplatform.googleapis.com"})
-
-    dp = aiplatform_v1.IndexDatapoint(
-        datapoint_id="query",
-        feature_vector=vector,
+    match_client = aiplatform_v1.MatchServiceClient(
+        client_options={"api_endpoint": f"{LOCATION}-aiplatform.googleapis.com"}
     )
-    q = aiplatform_v1.FindNeighborsRequest.Query(
-        datapoint=dp,
+    endpoint_name = _resolve_endpoint_name()
+
+    query_obj = aiplatform_v1.FindNeighborsRequest.Query(
         neighbor_count=top_k,
+        datapoint=aiplatform_v1.IndexDatapoint(feature_vector=vec)
     )
-
-    resp = client.find_neighbors(
+    req = aiplatform_v1.FindNeighborsRequest(
         index_endpoint=endpoint_name,
-        deployed_index_id=DEPLOYED_INDEX_ID,
-        queries=[q],
+        queries=[query_obj]
     )
+    resp = match_client.find_neighbors(request=req)
 
-    # One query -> one result set
-    neighbors = []
-    if resp.nearest_neighbors:
-        for n in resp.nearest_neighbors[0].neighbors:
-            nid = n.datapoint.datapoint_id
-            entry = catalog.get(nid, {})
-            neighbors.append({
-                "datapoint_id": nid,
-                "distance": n.distance,
-                "title": entry.get("title"),
-                "chunk_ix": entry.get("chunk_ix"),
-                "text": entry.get("text"),
+    results: List[Dict] = []
+    if resp and resp.nearest_neighbors:
+        for nn in resp.nearest_neighbors[0].neighbors:
+            dp_id = nn.datapoint.datapoint_id
+            meta = catalog.get(dp_id, {})
+            results.append({
+                "id": dp_id,
+                "score": nn.distance,
+                "title": meta.get("title"),
+                "chunk_ix": meta.get("chunk_ix"),
+                "text": meta.get("text"),
             })
-    return neighbors
+    return results
